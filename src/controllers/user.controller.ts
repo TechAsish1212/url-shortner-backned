@@ -3,6 +3,7 @@ import { User } from "../models/user.model";
 import { sendEmail } from "../utils/mail";
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
+import { AuthRequest } from "../middlewares/auth.middleware";
 
 
 export const signup = async (req: Request, res: Response) => {
@@ -163,7 +164,7 @@ export const signin = async (req: Request, res: Response) => {
         res.status(200).json({
             success: true,
             message: 'User login succesfully',
-            data:existingUser,
+            data: existingUser,
             AccessToken: accessToken,
         });
 
@@ -173,5 +174,24 @@ export const signin = async (req: Request, res: Response) => {
             success: false,
             message: "Internal server error"
         })
+    }
+}
+
+export const getPrpfile = async (req: AuthRequest, res: Response) => {
+    try {
+        const user = await User.findById(req.user?.id).select("-password");
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            user,
+        });
+    } catch (error) {
+
     }
 }
