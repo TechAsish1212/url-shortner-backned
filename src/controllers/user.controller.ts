@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { User } from "../models/user.model";
 import { sendEmail } from "../utils/mail";
 import crypto from 'crypto'
+import jwt from 'jsonwebtoken'
 
 
 export const signup = async (req: Request, res: Response) => {
@@ -92,8 +93,85 @@ export const verifyOTP = async (req: Request, res: Response) => {
 
     } catch (error) {
         return res.status(500).json({
-            success:false,
-            message:"Internal server error"
+            success: false,
+            message: "Internal server error"
+        })
+    }
+}
+
+export const signin = async (req: Request, res: Response) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({
+                success: false,
+                message: 'All fields are required'
+            })
+        }
+
+        const existingUser = await User.findOne({ email }).select("+password +refreshToken");
+        if (!existingUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'user not found with this email',
+            })
+        }
+
+        const isMatchPass = await existingUser.matchPassword(password);
+        if (!isMatchPass) {
+            return res.status(400).json({
+                success: false,
+                message: "user password is incorrect"
+            })
+        }
+
+        const refreshToken = jwt.sign(
+            { id: existingUser._id },
+            process.env.JWT_REFRESH_SECRET!,
+            {
+                expiresIn: "30d",
+            }
+        );
+
+        const accessToken = jwt.sign(
+            { id: existingUser._id },
+            process.env.JWT_SECRET!,
+            {
+                expiresIn: "15m",
+            }
+        );
+        existingUser.refreshToken = refreshToken;
+        existingUser.lastLoginAt = new Date();
+
+        await existingUser.save();
+
+        res.cookie("refreshToken", refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 30 * 24 * 60 * 60 * 1000,
+        });
+
+
+        res.cookie("refreshToken", refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 30 * 24 * 60 * 60 * 1000,
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'User login succesfully',
+            data:existingUser,
+            AccessToken: accessToken,
+        });
+
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error"
         })
     }
 }
