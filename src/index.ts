@@ -3,6 +3,7 @@ import { config } from "dotenv";
 import { nanoid } from "nanoid";
 import connectDB from "./config/db";
 import routes from "./routes";
+import cookieParser from "cookie-parser";
 
 
 config();
@@ -13,6 +14,7 @@ const PORT = process.env.PORT || 4001;
 // middleware
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
+app.use(cookieParser());
 
 // database connected
 connectDB();
