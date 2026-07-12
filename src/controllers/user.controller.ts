@@ -185,3 +185,25 @@ export const getPrpfile = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {}
 };
+
+export const signout = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await User.findById(req.user?.id);
+    if (user) {
+      user.refreshToken = undefined;
+      await user.save();
+    }
+
+    res.clearCookie("refreshToken");
+
+    res.status(200).json({
+      success: true,
+      message: "Logged out successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
