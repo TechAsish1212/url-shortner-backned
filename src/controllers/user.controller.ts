@@ -207,3 +207,68 @@ export const signout = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+export const updateProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, mobileNumber, countryCode, dob, gender } = req.body;
+
+    const user = await User.findById(req.user?.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (name !== undefined) {
+      user.name = name.trim();
+    }
+
+    if (mobileNumber !== undefined) {
+      user.mobileNumber = mobileNumber;
+    }
+
+    if (countryCode !== undefined) {
+      user.countryCode = countryCode;
+    }
+
+    if (dob) {
+      const [day, month, year] = dob.split("-");
+
+      const parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
+
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid date format. Use DD-MM-YYYY",
+        });
+      }
+
+      user.dob = parsedDate;
+    //   console.log(user.dob?.toLocaleDateString("en-IN"));
+    }
+
+    // if (dob !== undefined) {
+    //   user.dob = dob;
+    // }
+
+    if (gender !== undefined) {
+      user.gender = gender;
+    }
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile update successfuly",
+      user,
+    });
+  } catch (error) {
+    console.error("Update Profile Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
