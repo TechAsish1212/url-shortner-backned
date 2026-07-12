@@ -6,7 +6,7 @@ export interface ILink {
   userId: Types.ObjectId;
   originalUrl: string;
   shortCode: string;
-  customAlis?: string;
+  customAlias?: string;
   isActive: boolean;
   totalClicks: number;
   uniqueClicks: number;
@@ -43,7 +43,7 @@ const linkSchema = new Schema<ILink>({
     type: Number,
     default: 0,
   },
-  customAlis: String,
+  customAlias: String,
   expiresAt: Date,
 },{
     timestamps:true,
