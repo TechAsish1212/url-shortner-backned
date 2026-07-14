@@ -234,4 +234,84 @@ export const redirectToOriginalUrl = async (req: Request, res: Response) => {
   }
 };
 
+// get all links for authenticated user
+export const getAllUserLinks = async (req: Request, res: Response) => {
+  try {
+    if (!isAuthenticated(req)) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
 
+    const userId = req.user.id;
+
+    const {
+      page = 1,
+      limit = 10,
+      search = "",
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      isActive,
+    } = req.query;
+
+    const query: any = { userId: new Types.ObjectId(userId) };
+
+    if (search) {
+      query.$or = [
+        { originalUrl: { $regex: search, $options: "i" } },
+        { shortCode: { $regex: search, $options: "i" } },
+        { customAlias: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (isActive !== undefined) {
+      query.isActive = isActive === "true";
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const sort: any = {};
+    sort[sortBy as string] = sortOrder === "desc" ? -1 : 1;
+
+    const [links, totalCount, activeCount, totalClicks] = await Promise.all([
+      Link.find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(Number(limit))
+        .select("-__v"),
+      Link.countDocuments(query),
+      Link.countDocuments({ ...query, isActive: true }),
+      Link.aggregate([
+        { $match: { userId: new Types.ObjectId(userId) } },
+        { $group: { _id: null, total: { $sum: "$totalClicks" } } },
+      ]),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        links,
+        stats: {
+          total: totalCount,
+          active: activeCount,
+          inactive: totalCount - activeCount,
+          totalClicks: totalClicks[0]?.total || 0,
+        },
+        pagination: {
+          currentPage: Number(page),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+          totalItems: totalCount,
+          itemsPerPage: Number(limit),
+          hasNextPage: Number(page) < Math.ceil(totalCount / Number(limit)),
+          hasPrevPage: Number(page) > 1,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching links:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch links. Please try again later",
+    });
+  }
+};
