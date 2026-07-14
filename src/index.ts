@@ -4,12 +4,23 @@ import { nanoid } from "nanoid";
 import connectDB from "./config/db";
 import routes from "./routes";
 import cookieParser from "cookie-parser";
-
+import cors from 'cors'
 
 config();
 
 const app = express();
 const PORT = process.env.PORT || 4001;
+
+
+// CORS Configuration 
+app.use(cors({
+  origin: 'http://localhost:3000', 
+  credentials: true, // Allow cookies
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Authorization']
+}));
+
 
 // middleware
 app.use(express.json());
