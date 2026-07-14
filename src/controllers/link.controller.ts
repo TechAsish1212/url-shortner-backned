@@ -315,3 +315,49 @@ export const getAllUserLinks = async (req: Request, res: Response) => {
     });
   }
 };
+
+// get single links
+export const getLinksDetails = async (req: Request, res: Response) => {
+  try {
+    if (!isAuthenticated(req)) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const { id } = req.params;
+    const linkId = typeof id === "string" ? id : id[0];
+
+    const userId = req.user.id;
+
+    if (!Types.ObjectId.isValid(linkId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid link ID",
+      });
+    }
+
+    const link = await Link.findOne({
+      _id: new Types.ObjectId(linkId),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        message: "Link not found or you don't have permission to view it",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: link,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch link details",
+    });
+  }
+};
