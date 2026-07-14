@@ -6,5 +6,6 @@ const linkRoutes=Router();
 
 linkRoutes.post('/shorten',protect,createShortUrl);
 linkRoutes.get('/:shortCode',redirectToOriginalUrl);
+linkRoutes.get('/user/links',protect,getAllUserLinks);
 
 export default linkRoutes;
