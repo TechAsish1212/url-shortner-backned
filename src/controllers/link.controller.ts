@@ -4,6 +4,7 @@ import { isValidUrl } from "../utils/validators";
 import { Link } from "../models/link.model";
 import { codeGenerator } from "../utils/generateShortCode";
 import { Types } from "mongoose";
+import { ClickEvent } from "../models/clickEvent.model";
 
 // Extend the AuthRequest type for better type safety
 interface AuthenticatedRequest extends AuthRequest {
@@ -358,6 +359,86 @@ export const getLinksDetails = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch link details",
+    });
+  }
+};
+
+// get link analytics
+export const getLinkAnalytics = async (req: Request, res: Response) => {
+  try {
+    if (!isAuthenticated(req)) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const linkId = typeof id === "string" ? id : id[0];
+
+    if (!Types.ObjectId.isValid(linkId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid link Id",
+      });
+    }
+
+    const link = await Link.findOne({
+      _id: new Types.ObjectId(linkId),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Link not found or you don't have permission to view analytics",
+      });
+    }
+
+    // additional things
+    const clickThroughRate =
+      link.totalClicks > 0
+        ? ((link.uniqueClicks / link.totalClicks) * 100).toFixed(2)
+        : 0;
+
+    const daySinceCreation = Math.floor(
+      (Date.now() - link.createdAt.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    const averageClickPerDay =
+      daySinceCreation > 0
+        ? (link.totalClicks / daySinceCreation).toFixed(2)
+        : link.totalClicks;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        link: {
+          id: link._id,
+          originalUrl: link.originalUrl,
+          shortCode: link.shortCode,
+          customAlias: link.customAlias || null,
+          isActive: link.isActive,
+          createdAt: link.createdAt,
+          expiresAt: link.expiresAt || null,
+        },
+        analytics: {
+          totalClicks: link.totalClicks,
+          uniqueClicks: link.uniqueClicks,
+          clickThroughRate: Number(clickThroughRate),
+          averageClicksPerDay: Number(averageClickPerDay),
+          daySinceCreation,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching analytics:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch analytics",
     });
   }
 };
