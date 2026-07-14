@@ -22,6 +22,7 @@ const isAuthenticated = (req: Request): req is AuthenticatedRequest => {
   );
 };
 
+// create short link
 export const createShortUrl = async (req: Request, res: Response) => {
   try {
     if (!isAuthenticated(req)) {
@@ -111,9 +112,9 @@ export const createShortUrl = async (req: Request, res: Response) => {
           message: "Expiration date must be in the future",
         });
       }
-    }else{
-        expiresAtDate=new Date();
-        expiresAtDate.setDate(expiresAtDate.getDate()+30);
+    } else {
+      expiresAtDate = new Date();
+      expiresAtDate.setDate(expiresAtDate.getDate() + 30);
     }
 
     // new link
@@ -135,7 +136,7 @@ export const createShortUrl = async (req: Request, res: Response) => {
 
     res.status(201).json({
       success: true,
-      message:"Create URL shortlink successfully",
+      message: "Create URL shortlink successfully",
       data: {
         id: newLink._id,
         originalUrl: newLink.originalUrl,
@@ -157,3 +158,80 @@ export const createShortUrl = async (req: Request, res: Response) => {
     });
   }
 };
+
+// redirect to original url
+export const redirectToOriginalUrl = async (req: Request, res: Response) => {
+  try {
+    const { shortCode } = req.params;
+    if (!shortCode) {
+      return res.status(400).json({
+        success: false,
+        message: "short code is required",
+      });
+    }
+
+    // find link
+    const link = await Link.findOne({
+      $or: [{ shortCode }, { customAlias: shortCode }],
+    });
+
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        message: "Short URL not founnd",
+      });
+    }
+
+    if (!link.isActive) {
+      return res.status(410).json({
+        success: false,
+        message: "Link has been deactivated by owner",
+      });
+    }
+
+    if (link.expiresAt && new Date() > link.expiresAt) {
+      return res.status(410).json({
+        success: false,
+        message: "Link has expired",
+      });
+    }
+
+    // total clicks
+    link.totalClicks += 1;
+
+    // unique clicks
+    const clientIp = req.ip || req.socket.remoteAddress || "";
+    const userAgent = req.headers["user-agent"] || "";
+
+    // Simple unique tracking - you might want to use a more sophisticated method
+    // Store visitor info in a separate collection for detailed analytics
+    if (!req.cookies?.visited) {
+      link.uniqueClicks += 1;
+      res.cookie("visited", Date.now().toString(), {
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+      });
+    }
+
+    await link.save();
+
+    // log
+    console.log(
+      `Redirect: ${shortCode} -> ${link.originalUrl} | IP: ${clientIp} | UA: ${userAgent}`,
+    );
+
+    console.log(link.totalClicks);
+    console.log(link.uniqueClicks);
+    return res.redirect(link.originalUrl);
+  } catch (error) {
+    console.error("Error redirecting:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to redirect. Please try again later",
+    });
+  }
+};
+
+

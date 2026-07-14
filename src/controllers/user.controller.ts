@@ -159,7 +159,7 @@ export const signin = async (req: Request, res: Response) => {
       success: true,
       message: "User login succesfully",
       data: existingUser,
-      AccessToken: accessToken,
+      token: accessToken,
     });
   } catch (error) {
     return res.status(500).json({
