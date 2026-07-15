@@ -442,3 +442,54 @@ export const getLinkAnalytics = async (req: Request, res: Response) => {
     });
   }
 };
+
+// delete link
+export const deleteLink = async (req: Request, res: Response) => {
+  try {
+    if (!isAuthenticated(req)) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const { id } = req.params;
+    const linkId = typeof id === "string" ? id : id[0];
+    const userId = req.user.id;
+
+    if (!Types.ObjectId.isValid(linkId)) {
+      return res.json({
+        success: false,
+        message: "Invalid link Id",
+      });
+    }
+
+    const link = await Link.findOneAndDelete({
+      _id: new Types.ObjectId(linkId),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        message: "Link not found or you don't have permission to delete it",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Link deleted successfully",
+      data: {
+        id: link._id,
+        shortCode: link.shortCode,
+        deletedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error("Error deleting link:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete link",
+    });
+  }
+};
