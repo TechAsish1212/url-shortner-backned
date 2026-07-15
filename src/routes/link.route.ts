@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { protect } from "../middlewares/auth.middleware";
-import { createShortUrl, deleteLink, getAllUserLinks, getLinkAnalytics, getLinksDetails, redirectToOriginalUrl } from "../controllers/link.controller";
+import { createShortUrl, deleteLink, getAllUserLinks, getLinkAnalytics, getLinksDetails, redirectToOriginalUrl, updateLink } from "../controllers/link.controller";
 
 const linkRoutes=Router();
 
@@ -9,6 +9,7 @@ linkRoutes.get('/:shortCode',redirectToOriginalUrl);
 linkRoutes.get('/user/links',protect,getAllUserLinks);
 linkRoutes.get('/user/links/:id',protect,getLinksDetails)
 linkRoutes.get('/user/links/:id/analytics',protect,getLinkAnalytics);
+linkRoutes.put('/user/links/:id',protect,updateLink);
 linkRoutes.delete('/user/links/:id',protect,deleteLink);
 
 export default linkRoutes;
