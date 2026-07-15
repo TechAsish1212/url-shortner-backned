@@ -51,6 +51,13 @@ export const createShortUrl = async (req: Request, res: Response) => {
       });
     }
 
+    if (originalUrl.length > 2048) {
+      return res.status(400).json({
+        success: false,
+        message: "URL is too long. Maximum length is 2048 characters",
+      });
+    }
+
     let shortCode: string;
 
     // handle custom alias
@@ -439,6 +446,127 @@ export const getLinkAnalytics = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch analytics",
+    });
+  }
+};
+
+// update link
+export const updateLink = async (req: Request, res: Response) => {
+  try {
+    if (!isAuthenticated(req)) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const { id } = req.params;
+    const linkId = typeof id === "string" ? id : id[0];
+    const userId = req.user.id;
+    const { originalUrl, customAlias, expiresAt, isActive } = req.body;
+
+    if (!Types.ObjectId.isValid(linkId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid link ID",
+      });
+    }
+
+    const link = await Link.findOne({
+      _id: new Types.ObjectId(linkId),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        message: "Link not found or you don't have permission to update it",
+      });
+    }
+
+    if (originalUrl) {
+      if (!isValidUrl(originalUrl)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid URL format",
+        });
+      }
+
+      if (originalUrl.length > 2048) {
+        return res.status(400).json({
+          success: false,
+          message: "URL is too long. Maximum length is 2048 characters",
+        });
+      }
+
+      link.originalUrl = originalUrl;
+    }
+
+    if (customAlias !== undefined) {
+      if (customAlias && (customAlias.length < 3 || customAlias.length > 20)) {
+        return res.status(400).json({
+          success: false,
+          message: "Custom alias must be between 3 and 20 characters",
+        });
+      }
+
+      if (customAlias && !/^[a-zA-Z0-9_-]+$/.test(customAlias)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Custom alias can only contain letters, numbers, underscores, and hyphens",
+        });
+      }
+
+      if (customAlias) {
+        const existingLink = await Link.findOne({
+          customAlis: customAlias,
+          _id: { $ne: new Types.ObjectId(linkId) },
+        });
+
+        if (existingLink) {
+          return res.status(409).json({
+            success: false,
+            message: "Custom alias already taken",
+          });
+        }
+      }
+      link.customAlias = customAlias || null;
+    }
+
+    if (isActive !== undefined) {
+      link.isActive = isActive;
+    }
+
+    if (expiresAt !== undefined) {
+      if (expiresAt) {
+        const exAtDate = new Date(expiresAt);
+        if (isNaN(exAtDate.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid expiration date format",
+          });
+        }
+        if (exAtDate <= new Date()) {
+          return res.status(400).json({
+            success: false,
+            message: "Expiration date must be in the future",
+          });
+        }
+        link.expiresAt = exAtDate;
+      }
+    }
+
+    await link.save();
+    res.status(200).json({
+      success: true,
+      data: link,
+    });
+  } catch (error: any) {
+    console.error("Error updating link:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update link",
     });
   }
 };
