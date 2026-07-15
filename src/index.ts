@@ -14,8 +14,8 @@ const PORT = process.env.PORT || 4001;
 
 // CORS Configuration 
 app.use(cors({
-  origin: 'http://localhost:3000', 
-  credentials: true, // Allow cookies
+  origin: process.env.CLIENT_URL, 
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   exposedHeaders: ['Authorization']
