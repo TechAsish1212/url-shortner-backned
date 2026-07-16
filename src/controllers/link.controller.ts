@@ -281,7 +281,7 @@ export const getAllUserLinks = async (req: Request, res: Response) => {
     const sort: any = {};
     sort[sortBy as string] = sortOrder === "desc" ? -1 : 1;
 
-    const [links, totalCount, activeCount, totalClicks] = await Promise.all([
+    const [links, totalCount, activeCount, totalClicks, oldestLink] = await Promise.all([
       Link.find(query)
         .sort(sort)
         .skip(skip)
@@ -293,7 +293,22 @@ export const getAllUserLinks = async (req: Request, res: Response) => {
         { $match: { userId: new Types.ObjectId(userId) } },
         { $group: { _id: null, total: { $sum: "$totalClicks" } } },
       ]),
+      // Get the oldest link to calculate days since first link was created
+      Link.findOne({ userId: new Types.ObjectId(userId) })
+        .sort({ createdAt: 1 })
+        .select("createdAt"),
     ]);
+
+    // Calculate average clicks per day
+    let avgClicksPerDay = 0;
+    const totalClicksCount = totalClicks[0]?.total || 0;
+    
+    if (oldestLink && totalClicksCount > 0) {
+      const now = new Date();
+      const timeDiff = now.getTime() - oldestLink.createdAt.getTime();
+      const daysSinceFirstLink = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
+      avgClicksPerDay = Number((totalClicksCount / daysSinceFirstLink).toFixed(2));
+    }
 
     res.status(200).json({
       success: true,
@@ -303,7 +318,8 @@ export const getAllUserLinks = async (req: Request, res: Response) => {
           total: totalCount,
           active: activeCount,
           inactive: totalCount - activeCount,
-          totalClicks: totalClicks[0]?.total || 0,
+          totalClicks: totalClicksCount,
+          avgClicksPerDay,
         },
         pagination: {
           currentPage: Number(page),
