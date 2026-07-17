@@ -4,6 +4,7 @@ import { Link } from "../models/link.model";
 import { UAParser } from "ua-parser-js";
 import geoip from "geoip-lite";
 import { ClickEvent } from "../models/clickEvent.model";
+import { Types } from "mongoose";
 
 interface AuthenticatedRequest extends AuthRequest {
   user: {
@@ -98,7 +99,7 @@ export const trackClient = async (req: Request, res: Response) => {
     const geoData = geoip.lookup(clientIp) || {
       country: "Unknown",
       city: "Unknown",
-      region:"Unknown"
+      region: "Unknown",
     };
     console.log("Geo Data:", geoData);
 
@@ -122,7 +123,7 @@ export const trackClient = async (req: Request, res: Response) => {
       ipHash: hashIP(clientIp),
       country: geoData.country || "Unknown",
       city: geoData.city || "Unknown",
-      region:geoData.region||"Unknown",
+      region: geoData.region || "Unknown",
       deviceType: uaResult.device.type || "desktop",
       browser: uaResult.browser.name || "Unknown",
       os: uaResult.os.name || "Unknown",
@@ -155,6 +156,135 @@ export const trackClient = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Failed to track click",
+    });
+  }
+};
+
+// get click events for a specific link
+export const getLinkClicksEvent = async (req: Request, res: Response) => {
+  try {
+    if (!isAuthenticated(req)) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const { linkId } = req.params;
+    const userId = req.user.id;
+
+    const linkIdString = typeof linkId === "string" ? linkId : linkId?.[0];
+
+    if (!Types.ObjectId.isValid(linkIdString)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid link ID",
+      });
+    }
+
+    const link = await Link.findOne({
+      _id: new Types.ObjectId(linkIdString),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        message: "Link not found or you don't have permission",
+      });
+    }
+
+    const {
+      page = 1,
+      limit = 20,
+      startDate,
+      endDate,
+      deviceType,
+      browser,
+      country,
+    } = req.query;
+
+    const query: any = { linkId: new Types.ObjectId(linkIdString) };
+
+    if (startDate || endDate) {
+      query.clickedAt = {};
+      if (startDate) {
+        query.clickedAt.$gte = new Date(startDate as string);
+      }
+      if (endDate) {
+        query.clickedAt.$gte = new Date(endDate as string);
+      }
+    }
+
+    if (deviceType) {
+      query.deviceType = deviceType;
+    }
+
+    if (browser) {
+      query.browser = browser;
+    }
+
+    if (country) {
+      query.country = country;
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [clickEvents, totalCount, stats] = await Promise.all([
+      ClickEvent.find(query)
+        .sort({ clickedAt: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+      ClickEvent.countDocuments(query),
+      ClickEvent.aggregate([
+        { $match: { linkId: new Types.ObjectId(linkIdString) } },
+        {
+          $group: {
+            _id: null,
+            totalClicks: { $sum: 1 },
+            uniqueVisitors: { $addToSet: "$visitorId" },
+            devices: { $addToSet: "$deviceType" },
+            browsers: { $addToSet: "$browser" },
+            countries: { $addToSet: "$country" },
+          },
+        },
+      ]),
+    ]);
+
+    const statsData = stats[0] || {
+      totalClicks: 0,
+      uniqueVisitors: [],
+      devices: [],
+      browsers: [],
+      countries: [],
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        clickEvents,
+        stats: {
+          totalClicks: statsData.totalClicks,
+          uniqueVisitors: statsData.uniqueVisitors.length,
+          devices: statsData.devices,
+          browsers: statsData.browsers,
+          countries: statsData.countries,
+        },
+        pagination: {
+          currentPage: Number(page),
+          totalPages: Math.ceil(totalCount / Number(limit)),
+          totalItems: totalCount,
+          itemsPerPage: Number(limit),
+          hasNextPage: Number(page) < Math.ceil(totalCount / Number(limit)),
+          hasPrevPage: Number(page) > 1,
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error("Error fetching click events:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch click events",
     });
   }
 };
