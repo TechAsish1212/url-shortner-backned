@@ -122,6 +122,7 @@ export const trackClient = async (req: Request, res: Response) => {
       ipHash: hashIP(clientIp),
       country: geoData.country || "Unknown",
       city: geoData.city || "Unknown",
+      region:geoData.region||"Unknown",
       deviceType: uaResult.device.type || "desktop",
       browser: uaResult.browser.name || "Unknown",
       os: uaResult.os.name || "Unknown",
