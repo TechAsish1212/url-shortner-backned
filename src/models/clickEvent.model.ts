@@ -12,6 +12,7 @@ export interface IClickEvent {
   country: string;
 
   city: string;
+  region:string
 
   deviceType: string;
 
@@ -38,6 +39,7 @@ const clickEventSchema = new Schema<IClickEvent>({
   country: String,
 
   city: String,
+  region:String,
 
   deviceType: String,
 
