@@ -36,6 +36,7 @@ app.get('/api/health', (req: Request, res: Response) => {
 
 app.use('/api',routes);
 
+app.set('trust proxy',true);
 
 app.listen(PORT, () => {
     console.log(`Server is started at :: ${PORT}`);
