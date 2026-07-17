@@ -98,6 +98,7 @@ export const trackClient = async (req: Request, res: Response) => {
     const geoData = geoip.lookup(clientIp) || {
       country: "Unknown",
       city: "Unknown",
+      region:"Unknown"
     };
     console.log("Geo Data:", geoData);
 
