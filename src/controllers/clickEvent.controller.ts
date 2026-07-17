@@ -22,7 +22,7 @@ const isAuthenticated = (req: Request): req is AuthenticatedRequest => {
 
 const getClientIp = (req: Request): string => {
   return (
-    (req.headers["x-forward-for"] as string) ||
+    (req.headers["x-forwarded-for"] as string) ||
     req.socket.remoteAddress ||
     req.ip ||
     ""
@@ -84,8 +84,11 @@ export const trackClient = async (req: Request, res: Response) => {
     }
 
     const clientIp = getClientIp(req);
+    console.log("Client IP:", clientIp);
+
     const userAgent = req.headers["user-agent"] || "";
     console.log("User-Agent:", req.headers["user-agent"]);
+
     const referer = req.headers["referer"] || req.headers["origin"] || "";
 
     const parser = new UAParser(userAgent);
@@ -96,6 +99,7 @@ export const trackClient = async (req: Request, res: Response) => {
       country: "Unknown",
       city: "Unknown",
     };
+    console.log("Geo Data:", geoData);
 
     const visitorId = generateVisitorId(clientIp, userAgent);
 
@@ -129,6 +133,10 @@ export const trackClient = async (req: Request, res: Response) => {
     console.log(
       `Click tracked: ${shortCode} | IP: ${clientIp} | Device: ${uaResult.device.type || "desktop"}`,
     );
+
+    console.log("x-forwarded-for:", req.headers["x-forwarded-for"]);
+    console.log("req.ip:", req.ip);
+    console.log("remoteAddress:", req.socket.remoteAddress);
 
     res.status(200).json({
       success: true,
