@@ -288,3 +288,245 @@ export const getLinkClicksEvent = async (req: Request, res: Response) => {
     });
   }
 };
+
+// get click analytics woth aggregations
+export const getClickAnalytics = async (req: Request, res: Response) => {
+  try {
+    if (!isAuthenticated(req)) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const { linkId } = req.params;
+    const userId = req.user.id;
+
+    const linkIdString = typeof linkId === "string" ? linkId : linkId?.[0];
+
+    if (!Types.ObjectId.isValid(linkIdString)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invlid link Id",
+      });
+    }
+
+    const link = await Link.findOne({
+      _id: new Types.ObjectId(linkIdString),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        message: "Link not found or you don't have permission",
+      });
+    }
+
+    const { period = "7d" } = req.query;
+
+    const now = new Date();
+    let startDate = new Date();
+    switch (period) {
+      case "24h":
+        startDate.setDate(now.getDate() - 1);
+        break;
+      case "7d":
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case "30d":
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case "90d":
+        startDate.setDate(now.getDate() - 90);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 7);
+    }
+
+    const matchCondition = {
+      linkId: new Types.ObjectId(linkIdString),
+      clickedAt: { $gte: startDate, $lte: now },
+    };
+
+    // daily click
+    const dailyClicks = await ClickEvent.aggregate([
+      { $match: matchCondition },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$clickedAt" },
+            month: { $month: "$clickedAt" },
+            day: { $dayOfMonth: "$clickedAt" },
+          },
+          count: { $sum: 1 },
+          uniqueVisitors: { $addToSet: "$visitorId" },
+        },
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
+    ]);
+
+    // get device breakdown
+    const deviceStats = await ClickEvent.aggregate([
+      { $match: matchCondition },
+      {
+        $group: {
+          _id: "$deviceType",
+          count: { $sum: 1 },
+          uniqueVisitors: { $addToSet: "$vistorId" },
+        },
+      },
+      { $sort: { count: -1 } },
+    ]);
+
+    // Get browser distribution
+    const browserStats = await ClickEvent.aggregate([
+      { $match: matchCondition },
+      {
+        $group: {
+          _id: "$browser",
+          count: { $sum: 1 },
+          uniqueVisitors: { $addToSet: "$visitorId" },
+        },
+      },
+      { $sort: { count: -1 } },
+    ]);
+
+    // get os breackdown
+    const osStats = await ClickEvent.aggregate([
+      { $match: matchCondition },
+      {
+        $group: {
+          _id: "$os",
+          count: { $sum: 1 },
+          uniqueVisitors: { $addToSet: "visitorId" },
+        },
+      },
+      { $sort: { count: -1 } },
+    ]);
+
+    // get country breakdown
+    const countryStats = await ClickEvent.aggregate([
+      { $match: matchCondition },
+      {
+        $group: {
+          _id: "$country",
+          count: { $sum: 1 },
+          uniqueVisitors: { $addToSet: "$visitorId" },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 10 },
+    ]);
+
+    // Get referer stats
+    const refererStats = await ClickEvent.aggregate([
+      { $match: matchCondition },
+      { $match: { referer: { $ne: null } } },
+      {
+        $group: {
+          _id: "$referer",
+          count: { $sum: 1 },
+          uniqueVisitors: { $addToSet: "$visitorId" },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 10 },
+    ]);
+
+    // Calculate total unique visitors
+    const uniqueVisitors = await ClickEvent.aggregate([
+      { $match: matchCondition },
+      { $group: { _id: "$visitorId" } },
+      { $count: "total" },
+    ]);
+
+    // Format daily clicks for chart
+    const formattedDailyClicks = dailyClicks.map((day: any) => ({
+      date: new Date(day._id.year, day._id.month - 1, day._id.day),
+      clicks: day.count,
+      uniqueVisitors: day.uniqueVisitors.length,
+    }));
+
+    // response
+    res.status(200).json({
+      success: true,
+      data: {
+        period,
+        summary: {
+          totalClicks: formattedDailyClicks.reduce(
+            (sum, d) => sum + d.clicks,
+            0,
+          ),
+          uniqueVisitors: uniqueVisitors[0]?.total || 0,
+          averageClicksPerDay:
+            formattedDailyClicks.length > 0
+              ? Math.round(
+                  formattedDailyClicks.reduce((sum, d) => sum + d.clicks, 0) /
+                    formattedDailyClicks.length,
+                )
+              : 0,
+          startDate,
+          endDate: now,
+        },
+        dailyClicks: formattedDailyClicks,
+        devices: deviceStats.map((d) => ({
+          type: d._id || "Unknown",
+          clicks: d.count,
+          uniqueVisitors: d.uniqueVisitors.length,
+          percentage: Math.round(
+            (d.count /
+              (formattedDailyClicks.reduce((sum, d) => sum + d.clicks, 0) ||
+                1)) *
+              100,
+          ),
+        })),
+        browsers: browserStats.map((b) => ({
+          name: b._id || "Unknown",
+          clicks: b.count,
+          uniqueVisitors: b.uniqueVisitors.length,
+          percentage: Math.round(
+            (b.count /
+              (formattedDailyClicks.reduce((sum, d) => sum + d.clicks, 0) ||
+                1)) *
+              100,
+          ),
+        })),
+        operatingSystems: osStats.map((os) => ({
+          name: os._id || "Unknown",
+          clicks: os.count,
+          uniqueVisitors: os.uniqueVisitors.length,
+          percentage: Math.round(
+            (os.count /
+              (formattedDailyClicks.reduce((sum, d) => sum + d.clicks, 0) ||
+                1)) *
+              100,
+          ),
+        })),
+        countries: countryStats.map((c) => ({
+          name: c._id || "Unknown",
+          clicks: c.count,
+          uniqueVisitors: c.uniqueVisitors.length,
+          percentage: Math.round(
+            (c.count /
+              (formattedDailyClicks.reduce((sum, d) => sum + d.clicks, 0) ||
+                1)) *
+              100,
+          ),
+        })),
+        referers: refererStats.map((r) => ({
+          url: r._id,
+          clicks: r.count,
+          uniqueVisitors: r.uniqueVisitors.length,
+        })),
+      },
+    });
+  } catch (error: any) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+    });
+  }
+};
