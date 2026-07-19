@@ -373,7 +373,7 @@ export const getClickAnalytics = async (req: Request, res: Response) => {
         $group: {
           _id: "$deviceType",
           count: { $sum: 1 },
-          uniqueVisitors: { $addToSet: "$vistorId" },
+          uniqueVisitors: { $addToSet: "$visitorId" },
         },
       },
       { $sort: { count: -1 } },
@@ -399,7 +399,7 @@ export const getClickAnalytics = async (req: Request, res: Response) => {
         $group: {
           _id: "$os",
           count: { $sum: 1 },
-          uniqueVisitors: { $addToSet: "visitorId" },
+          uniqueVisitors: { $addToSet: "$visitorId" },
         },
       },
       { $sort: { count: -1 } },
@@ -527,6 +527,72 @@ export const getClickAnalytics = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Internal Server Error",
+    });
+  }
+};
+
+// get real-time clicks (for live dashboard)
+export const getRecentClicks = async (req: Request, res: Response) => {
+  try {
+    if (!isAuthenticated(req)) {
+      return res.status(400).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const userId=req.user.id;
+    const {limit=20} =req.query;
+
+    // get user's links
+    const userLinks=await Link.find({
+      userId:new Types.ObjectId(userId)
+    }).select('_id');
+
+    const linkIds=userLinks.map(link=>link._id);
+
+    // get recent clicks
+    const recentClicks=await ClickEvent.find({
+      linkId:{$in:linkIds}
+    })
+    .sort({clickedAt:-1})
+    .limit(Number(limit))
+    .populate('linkId','originalUrl shortCode customAlias');
+
+    const formattedClicks=recentClicks.map((click:any)=>({
+      id:click.id,
+      link:{
+        originalUrl:click.linkId.originalUrl,
+        shortCode:click.linkId.shortCode,
+        customAlias:click.linkId.customAlias,
+      },
+      visitor:{
+        id:click.visitorId,
+        device:click.deviceType,
+        browser:click.browser,
+        os:click.os,
+      },
+      location:{
+        country:click.country,
+        city:click.city,
+      },
+      referer:click.referer,
+      timestamp:click.clickedAt,
+    }))
+
+    res.status(200).json({
+      success:true,
+      data:{
+        clicks:formattedClicks,
+        total:formattedClicks.length
+      }
+    })
+
+  } catch (error: any) {
+    console.error("Error fetching recent clicks:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch recent clicks",
     });
   }
 };
